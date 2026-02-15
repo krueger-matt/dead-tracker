@@ -1,0 +1,145 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+function Home({ availableYears, stats }) {
+  const [selectedYear, setSelectedYear] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
+
+  const handleYearSelect = (year) => {
+    navigate(`/browse?year=${year}`);
+  };
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (searchTerm.trim()) {
+      // Search could be venue, city, date, or song name
+      // Let browse page handle the actual filtering
+      navigate(`/browse?search=${encodeURIComponent(searchTerm)}`);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-50">
+      {/* Hero Section */}
+      <div className="max-w-4xl mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold text-gray-900 mb-4">
+            Dead Tracker
+          </h1>
+          <p className="text-xl text-gray-600 mb-2">
+            Track Your Grateful Dead Listening Journey
+          </p>
+          <p className="text-gray-500">
+            Explore {stats.total.toLocaleString()} shows from 1965-1995
+          </p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="text-3xl font-bold text-blue-600 mb-2">
+              {stats.total.toLocaleString()}
+            </div>
+            <div className="text-gray-600">Total Shows</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="text-3xl font-bold text-green-600 mb-2">
+              {stats.archive.toLocaleString()}
+            </div>
+            <div className="text-gray-600">Available on Archive</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="text-3xl font-bold text-purple-600 mb-2">
+              {stats.listened.toLocaleString()}
+            </div>
+            <div className="text-gray-600">You've Listened</div>
+          </div>
+        </div>
+
+        {/* Search Box */}
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+            Find a Show
+          </h2>
+          <form onSubmit={handleSearch} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search by venue, city, date, or song
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="e.g., Fillmore, Cornell, Dark Star, 1977-05-08"
+                  className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Search
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {/* Browse by Year */}
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+            Browse by Year
+          </h2>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {availableYears.map(year => (
+              <button
+                key={year}
+                onClick={() => handleYearSelect(year)}
+                className="px-4 py-3 bg-gray-100 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition-colors font-medium text-gray-700"
+              >
+                {year}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4">
+            <button
+              onClick={() => navigate('/browse')}
+              className="w-full px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium mb-3"
+            >
+              View All Shows
+            </button>
+            <button
+              onClick={() => navigate('/advanced-search')}
+              className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+            >
+              🔍 Advanced Setlist Search
+            </button>
+          </div>
+        </div>
+
+        {/* Features */}
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Track Your Progress
+            </h3>
+            <p className="text-gray-600">
+              Mark shows you've listened to and add personal notes about your favorite performances.
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Archive Integration
+            </h3>
+            <p className="text-gray-600">
+              Direct links to archive.org recordings for nearly 2,000 shows with available audio.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Home;
