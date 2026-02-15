@@ -317,7 +317,7 @@ function AdvancedSearch() {
                   onChange={(e) => handleSong1Change(e.target.value)}
                   onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
                   onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
-                  placeholder="e.g., China Cat"
+                  placeholder="e.g., China Cat Sunflower"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
                 {showSong1Suggestions && song1Suggestions.length > 0 && (
