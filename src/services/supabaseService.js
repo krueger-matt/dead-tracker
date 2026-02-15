@@ -17,6 +17,7 @@ export async function fetchShows() {
       .from('shows')
       .select('*')
       .order('date', { ascending: true })
+      .order('show_number', { ascending: true })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
     
     if (error) {
@@ -36,6 +37,7 @@ export async function fetchShows() {
   return allShows.map(show => ({
     id: show.id,
     date: show.date,
+    showNumber: show.show_number || 1,
     venue: show.venue,
     city: show.city || '',
     state: show.state || '',
@@ -43,30 +45,30 @@ export async function fetchShows() {
   }));
 }
 
-// User data (ratings/notes) - now using Supabase
+// User data (listened status/notes) - using Supabase
 export async function getShowData() {
   const { data, error } = await supabase
     .from('user_show_data')
-    .select('show_id, rating, notes');
+    .select('show_id, listened, notes');
   
   if (error) {
     console.error('Error fetching user show data:', error);
     return {};
   }
   
-  // Convert array to object format: { showId: { rating, notes } }
+  // Convert array to object format: { showId: { listened, notes } }
   return data.reduce((acc, item) => {
     acc[item.show_id] = {
-      rating: item.rating || 0,
+      listened: item.listened || false,
       notes: item.notes || ''
     };
     return acc;
   }, {});
 }
 
-export async function updateShowData(showId, rating, notes) {
-  // If no rating and no notes, delete the record
-  if (rating === 0 && !notes) {
+export async function updateShowData(showId, listened, notes) {
+  // If not listened and no notes, delete the record
+  if (!listened && !notes) {
     const { error } = await supabase
       .from('user_show_data')
       .delete()
@@ -81,7 +83,7 @@ export async function updateShowData(showId, rating, notes) {
       .from('user_show_data')
       .upsert({
         show_id: showId,
-        rating: rating || 0,
+        listened: listened || false,
         notes: notes || '',
         updated_at: new Date().toISOString()
       }, {

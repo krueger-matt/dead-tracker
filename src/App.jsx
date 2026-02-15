@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
-import Header from './components/Header';
-import ShowList from './components/ShowList';
-import { fetchShows } from './services/supabaseService';
-import { getShowData, updateShowData } from './services/supabaseService';
+import Home from './pages/Home';
+import Browse from './pages/Browse';
+import ShowDetail from './pages/ShowDetail';
+import AdvancedSearch from './pages/AdvancedSearch';
+import { fetchShows, getShowData, updateShowData } from './services/supabaseService';
 
 // Helper to get year from date string
 const getYear = (dateString) => dateString.substring(0, 4);
@@ -11,10 +13,7 @@ const getYear = (dateString) => dateString.substring(0, 4);
 function App() {
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showData, setShowData] = useState({}); // { showId: { rating, notes } }
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedYear, setSelectedYear] = useState(''); // Start with no year selected
-  const [showArchiveOnly, setShowArchiveOnly] = useState(false);
+  const [showData, setShowData] = useState({}); // { showId: { listened, notes } }
 
   // Load shows from Supabase on mount
   useEffect(() => {
@@ -36,9 +35,9 @@ function App() {
     loadShowData();
   }, []);
 
-  // Handle updating show rating/notes
-  const handleUpdateShow = async (showId, rating, notes) => {
-    const newData = await updateShowData(showId, rating, notes);
+  // Handle updating show listened/notes
+  const handleUpdateShow = async (showId, listened, notes) => {
+    const newData = await updateShowData(showId, listened, notes);
     setShowData(newData);
   };
 
@@ -48,43 +47,19 @@ function App() {
     return years.sort(); // Ascending order (1965 first)
   }, [shows]);
 
-  // Set initial year to earliest year once shows are loaded
-  useEffect(() => {
-    if (availableYears.length > 0 && selectedYear === '') {
-      setSelectedYear(availableYears[0]);
-    }
-  }, [availableYears, selectedYear]);
-
-  // Filter shows based on search, year, and archive filter
-  const filteredShows = useMemo(() => {
-    return shows.filter(show => {
-      const matchesSearch = searchTerm === '' || 
-        show.venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        show.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        show.date.includes(searchTerm);
-      
-      const matchesYear = selectedYear === 'all' || 
-        show.date.startsWith(selectedYear);
-      
-      const matchesArchive = !showArchiveOnly || show.hasArchiveRecordings;
-      
-      return matchesSearch && matchesYear && matchesArchive;
-    });
-  }, [shows, searchTerm, selectedYear, showArchiveOnly]);
-
   // Calculate progress statistics
   const stats = useMemo(() => {
     const totalShows = shows.length;
     const listenedShows = Object.keys(showData).filter(id => {
       const data = showData[id];
-      return data && data.rating > 0;
+      return data && data.listened;
     }).length;
     
     const archiveShows = shows.filter(s => s.hasArchiveRecordings).length;
     const listenedArchiveShows = Object.keys(showData).filter(id => {
       const show = shows.find(s => s.id === id);
       const data = showData[id];
-      return show && show.hasArchiveRecordings && data && data.rating > 0;
+      return show && show.hasArchiveRecordings && data && data.listened;
     }).length;
     
     return {
@@ -107,28 +82,39 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header 
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        selectedYear={selectedYear}
-        onYearChange={setSelectedYear}
-        availableYears={availableYears}
-        showArchiveOnly={showArchiveOnly}
-        onArchiveFilterChange={setShowArchiveOnly}
-        stats={stats}
-      />
-      
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <ShowList 
-          shows={filteredShows}
-          showData={showData}
-          onUpdateShow={handleUpdateShow}
-          searchTerm={searchTerm}
-          selectedYear={selectedYear}
+    <BrowserRouter basename="/dead-tracker">
+      <Routes>
+        <Route 
+          path="/" 
+          element={
+            <Home 
+              availableYears={availableYears}
+              stats={stats}
+            />
+          } 
         />
-      </main>
-    </div>
+        <Route 
+          path="/browse" 
+          element={
+            <Browse 
+              shows={shows}
+              showData={showData}
+              onUpdateShow={handleUpdateShow}
+              stats={stats}
+              availableYears={availableYears}
+            />
+          } 
+        />
+        <Route 
+          path="/show/:showId" 
+          element={<ShowDetail />} 
+        />
+        <Route 
+          path="/advanced-search" 
+          element={<AdvancedSearch />} 
+        />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
