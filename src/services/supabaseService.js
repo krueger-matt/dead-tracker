@@ -1,69 +1,98 @@
-// Supabase Service
-// This module handles all database interactions
-// Currently in MOCK MODE - uses localStorage
-// Will be replaced with real Supabase client when you set up your account
+import { createClient } from '@supabase/supabase-js';
 
-const STORAGE_KEY = 'gd-show-data';
-const USE_MOCK = true; // Set to false when Supabase is configured
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Supabase configuration (fill these in when you set up Supabase)
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Mock functions using localStorage
-const mockGetShowData = () => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored ? JSON.parse(stored) : {};
-};
+// Fetch all shows from Supabase (with pagination to get all 2269 shows)
+export async function fetchShows() {
+  const PAGE_SIZE = 1000;
+  let allShows = [];
+  let page = 0;
+  let hasMore = true;
 
-const mockUpdateShowData = (showId, rating, notes) => {
-  const allData = mockGetShowData();
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('shows')
+      .select('*')
+      .order('date', { ascending: true })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    
+    if (error) {
+      console.error('Error fetching shows:', error);
+      return allShows;
+    }
+    
+    if (data && data.length > 0) {
+      allShows = [...allShows, ...data];
+      hasMore = data.length === PAGE_SIZE;
+      page++;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allShows.map(show => ({
+    id: show.id,
+    date: show.date,
+    venue: show.venue,
+    city: show.city || '',
+    state: show.state || '',
+    hasArchiveRecordings: show.has_archive_recordings
+  }));
+}
+
+// User data (ratings/notes) - now using Supabase
+export async function getShowData() {
+  const { data, error } = await supabase
+    .from('user_show_data')
+    .select('show_id, rating, notes');
   
-  if (rating === 0 && !notes) {
-    // Remove if unrated and no notes
-    delete allData[showId];
-  } else {
-    allData[showId] = { rating, notes };
+  if (error) {
+    console.error('Error fetching user show data:', error);
+    return {};
   }
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
-  return allData;
-};
+  // Convert array to object format: { showId: { rating, notes } }
+  return data.reduce((acc, item) => {
+    acc[item.show_id] = {
+      rating: item.rating || 0,
+      notes: item.notes || ''
+    };
+    return acc;
+  }, {});
+}
 
-// Real Supabase functions (to be used later)
-const supabaseGetShowData = async () => {
-  // TODO: Implement when Supabase is configured
-  // const { data, error } = await supabase
-  //   .from('listened_shows')
-  //   .select('show_id, rating, notes');
-  // return data.reduce((acc, item) => {
-  //   acc[item.show_id] = { rating: item.rating, notes: item.notes };
-  //   return acc;
-  // }, {});
-  throw new Error('Supabase not configured');
-};
-
-const supabaseUpdateShowData = async (showId, rating, notes) => {
-  // TODO: Implement when Supabase is configured
-  // if (rating === 0 && !notes) {
-  //   await supabase.from('listened_shows').delete().eq('show_id', showId);
-  // } else {
-  //   await supabase.from('listened_shows').upsert({ 
-  //     show_id: showId, 
-  //     rating, 
-  //     notes 
-  //   });
-  // }
-  throw new Error('Supabase not configured');
-};
-
-// Export the appropriate functions based on mode
-export const getShowData = USE_MOCK 
-  ? mockGetShowData 
-  : supabaseGetShowData;
-
-export const updateShowData = USE_MOCK 
-  ? mockUpdateShowData 
-  : supabaseUpdateShowData;
-
-export const isUsingMock = USE_MOCK;
+export async function updateShowData(showId, rating, notes) {
+  // If no rating and no notes, delete the record
+  if (rating === 0 && !notes) {
+    const { error } = await supabase
+      .from('user_show_data')
+      .delete()
+      .eq('show_id', showId);
+    
+    if (error) {
+      console.error('Error deleting user show data:', error);
+    }
+  } else {
+    // Upsert (insert or update)
+    const { error } = await supabase
+      .from('user_show_data')
+      .upsert({
+        show_id: showId,
+        rating: rating || 0,
+        notes: notes || '',
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'show_id'
+      });
+    
+    if (error) {
+      console.error('Error updating user show data:', error);
+    }
+  }
+  
+  // Return fresh data
+  return await getShowData();
+}

@@ -2,15 +2,30 @@ import { useState, useEffect, useMemo } from 'react';
 import './index.css';
 import Header from './components/Header';
 import ShowList from './components/ShowList';
-import { allShows as sampleShows, getYear } from './data/allShows';
-import { getShowData, updateShowData, isUsingMock } from './services/supabaseService';
+import { fetchShows } from './services/supabaseService';
+import { getShowData, updateShowData } from './services/supabaseService';
+
+// Helper to get year from date string
+const getYear = (dateString) => dateString.substring(0, 4);
 
 function App() {
-  const [shows] = useState(sampleShows); // In production, this will be fetched from Supabase
+  const [shows, setShows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showData, setShowData] = useState({}); // { showId: { rating, notes } }
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedYear, setSelectedYear] = useState(''); // Start with no year selected
   const [showArchiveOnly, setShowArchiveOnly] = useState(false);
+
+  // Load shows from Supabase on mount
+  useEffect(() => {
+    const loadShows = async () => {
+      setLoading(true);
+      const data = await fetchShows();
+      setShows(data);
+      setLoading(false);
+    };
+    loadShows();
+  }, []);
 
   // Load show data on mount
   useEffect(() => {
@@ -33,84 +48,86 @@ function App() {
     return years.sort(); // Ascending order (1965 first)
   }, [shows]);
 
-  // Filter shows
-  const displayedShows = useMemo(() => {
-    let filtered = shows;
-    
-    if (showArchiveOnly) {
-      filtered = filtered.filter(show => show.hasArchiveRecordings);
+  // Set initial year to earliest year once shows are loaded
+  useEffect(() => {
+    if (availableYears.length > 0 && selectedYear === '') {
+      setSelectedYear(availableYears[0]);
     }
+  }, [availableYears, selectedYear]);
+
+  // Filter shows based on search, year, and archive filter
+  const filteredShows = useMemo(() => {
+    return shows.filter(show => {
+      const matchesSearch = searchTerm === '' || 
+        show.venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        show.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        show.date.includes(searchTerm);
+      
+      const matchesYear = selectedYear === 'all' || 
+        show.date.startsWith(selectedYear);
+      
+      const matchesArchive = !showArchiveOnly || show.hasArchiveRecordings;
+      
+      return matchesSearch && matchesYear && matchesArchive;
+    });
+  }, [shows, searchTerm, selectedYear, showArchiveOnly]);
+
+  // Calculate progress statistics
+  const stats = useMemo(() => {
+    const totalShows = shows.length;
+    const listenedShows = Object.keys(showData).filter(id => {
+      const data = showData[id];
+      return data && data.rating > 0;
+    }).length;
     
-    return filtered;
-  }, [shows, showArchiveOnly]);
+    const archiveShows = shows.filter(s => s.hasArchiveRecordings).length;
+    const listenedArchiveShows = Object.keys(showData).filter(id => {
+      const show = shows.find(s => s.id === id);
+      const data = showData[id];
+      return show && show.hasArchiveRecordings && data && data.rating > 0;
+    }).length;
+    
+    return {
+      total: totalShows,
+      listened: listenedShows,
+      archive: archiveShows,
+      listenedArchive: listenedArchiveShows
+    };
+  }, [shows, showData]);
 
-  // Count shows with archive recordings
-  const showsWithArchive = useMemo(() => {
-    return shows.filter(show => show.hasArchiveRecordings).length;
-  }, [shows]);
-
-  // Count listened shows (shows with rating > 0)
-  const listenedCount = useMemo(() => {
-    return Object.values(showData).filter(data => data.rating > 0).length;
-  }, [showData]);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-semibold text-gray-700 mb-2">Loading shows...</div>
+          <div className="text-gray-500">Fetching from database</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Mock Mode Warning */}
-        {isUsingMock && (
-          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <span className="text-xl">⚠️</span>
-              <div className="text-sm text-yellow-800">
-                <strong>Development Mode:</strong> Using browser storage. 
-                Your progress is saved locally but won't sync across devices. 
-                Connect to Supabase for permanent cloud storage.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Header with search and stats */}
-        <Header
-          totalShows={showsWithArchive}
-          listenedCount={listenedCount}
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
-          selectedYear={selectedYear}
-          onYearChange={setSelectedYear}
-          availableYears={availableYears}
-          showArchiveOnly={showArchiveOnly}
-          onToggleArchiveOnly={setShowArchiveOnly}
-        />
-
-        {/* Show List */}
-        <ShowList
-          shows={displayedShows}
+    <div className="min-h-screen bg-gray-50">
+      <Header 
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        selectedYear={selectedYear}
+        onYearChange={setSelectedYear}
+        availableYears={availableYears}
+        showArchiveOnly={showArchiveOnly}
+        onArchiveFilterChange={setShowArchiveOnly}
+        stats={stats}
+      />
+      
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <ShowList 
+          shows={filteredShows}
           showData={showData}
           onUpdateShow={handleUpdateShow}
           searchTerm={searchTerm}
           selectedYear={selectedYear}
         />
-
-        {/* Footer */}
-        <div className="mt-8 text-center text-sm text-gray-500">
-          <p>
-            This is sample data. In production, this will display all ~2,300 Grateful Dead shows.
-          </p>
-          <p className="mt-2">
-            Recordings hosted on{' '}
-            <a 
-              href="https://archive.org/details/GratefulDead" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:underline"
-            >
-              Internet Archive
-            </a>
-          </p>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
