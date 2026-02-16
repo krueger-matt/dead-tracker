@@ -4,16 +4,26 @@ import { supabase } from '../services/supabaseService';
 import Header from '../components/Header';
 import ShowList from '../components/ShowList';
 
-function Browse({ shows, showData, onUpdateShow, stats, availableYears }) {
+function Browse({ shows, showData, onUpdateShow, stats, availableYears, selectedBand, onBandChange, availableBands }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [showQueueOnly, setShowQueueOnly] = useState(searchParams.get('queue') === 'true');
   const [selectedYear, setSelectedYear] = useState(
+    searchParams.get('queue') === 'true' ? 'all' :
     searchParams.get('year') || 
     (searchParams.get('search') ? 'all' : availableYears[0] || '')
   );
   const [showArchiveOnly, setShowArchiveOnly] = useState(false);
   const [showsWithSongs, setShowsWithSongs] = useState(new Set());
   const [searchingSongs, setSearchingSongs] = useState(false);
+
+  // Handle queue filter toggle - switch to all years when enabling
+  const handleQueueFilterChange = (enabled) => {
+    setShowQueueOnly(enabled);
+    if (enabled) {
+      setSelectedYear('all');
+    }
+  };
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -82,10 +92,12 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears }) {
         show.date.startsWith(selectedYear);
       
       const matchesArchive = !showArchiveOnly || show.hasArchiveRecordings;
+
+      const matchesQueue = !showQueueOnly || (showData[show.id] && showData[show.id].wantToListen);
       
-      return matchesSearch && matchesYear && matchesArchive;
+      return matchesSearch && matchesYear && matchesArchive && matchesQueue;
     });
-  }, [shows, searchTerm, selectedYear, showArchiveOnly, showsWithSongs]);
+  }, [shows, searchTerm, selectedYear, showArchiveOnly, showQueueOnly, showsWithSongs, showData]);
 
   // Calculate stats for FILTERED shows
   const filteredStats = useMemo(() => {
@@ -119,7 +131,12 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears }) {
         availableYears={availableYears}
         showArchiveOnly={showArchiveOnly}
         onArchiveFilterChange={setShowArchiveOnly}
+        showQueueOnly={showQueueOnly}
+        onQueueFilterChange={handleQueueFilterChange}
         stats={filteredStats}
+        selectedBand={selectedBand}
+        onBandChange={onBandChange}
+        availableBands={availableBands}
       />
       
       <main className="max-w-4xl mx-auto px-4 py-8">

@@ -41,34 +41,36 @@ export async function fetchShows() {
     venue: show.venue,
     city: show.city || '',
     state: show.state || '',
-    hasArchiveRecordings: show.has_archive_recordings
+    hasArchiveRecordings: show.has_archive_recordings,
+    band: show.band || 'Grateful Dead'
   }));
 }
 
-// User data (listened status/notes) - using Supabase
+// User data (listened status/notes/want_to_listen) - using Supabase
 export async function getShowData() {
   const { data, error } = await supabase
     .from('user_show_data')
-    .select('show_id, listened, notes');
+    .select('show_id, listened, notes, want_to_listen');
   
   if (error) {
     console.error('Error fetching user show data:', error);
     return {};
   }
   
-  // Convert array to object format: { showId: { listened, notes } }
+  // Convert array to object format: { showId: { listened, notes, wantToListen } }
   return data.reduce((acc, item) => {
     acc[item.show_id] = {
       listened: item.listened || false,
-      notes: item.notes || ''
+      notes: item.notes || '',
+      wantToListen: item.want_to_listen || false
     };
     return acc;
   }, {});
 }
 
-export async function updateShowData(showId, listened, notes) {
-  // If not listened and no notes, delete the record
-  if (!listened && !notes) {
+export async function updateShowData(showId, listened, notes, wantToListen) {
+  // If no data at all, delete the record
+  if (!listened && !notes && !wantToListen) {
     const { error } = await supabase
       .from('user_show_data')
       .delete()
@@ -85,6 +87,7 @@ export async function updateShowData(showId, listened, notes) {
         show_id: showId,
         listened: listened || false,
         notes: notes || '',
+        want_to_listen: wantToListen || false,
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'show_id'

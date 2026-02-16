@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-function Home({ availableYears, stats }) {
+function Home({ availableYears, stats, selectedBand, onBandChange, availableBands }) {
   const [selectedYear, setSelectedYear] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
@@ -27,16 +27,49 @@ function Home({ availableYears, stats }) {
           <h1 className="text-5xl font-bold text-gray-900 mb-4">
             Dead Tracker
           </h1>
-          <p className="text-xl text-gray-600 mb-2">
-            Track Your Grateful Dead Listening Journey
+          <p className="text-xl text-gray-600 mb-4">
+            Track Your Listening Journey
           </p>
-          <p className="text-gray-500">
-            Explore {stats.total.toLocaleString()} shows from 1965-1995
+
+          {/* Band Selector */}
+          {availableBands.length > 1 && (
+            <div className="flex justify-center gap-2 flex-wrap">
+              {availableBands.map(band => (
+                <button
+                  key={band}
+                  onClick={() => onBandChange(band)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    selectedBand === band
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {band}
+                </button>
+              ))}
+              <button
+                onClick={() => onBandChange('all')}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  selectedBand === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                All Bands
+              </button>
+            </div>
+          )}
+          
+          <p className="text-gray-500 mt-4">
+            {selectedBand === 'all' 
+              ? `Explore ${stats.total.toLocaleString()} shows across all bands`
+              : `Explore ${stats.total.toLocaleString()} ${selectedBand} shows`
+            }
           </p>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
           <div className="bg-white rounded-lg shadow p-6 text-center">
             <div className="text-3xl font-bold text-blue-600 mb-2">
               {stats.total.toLocaleString()}
@@ -54,6 +87,17 @@ function Home({ availableYears, stats }) {
               {stats.listened.toLocaleString()}
             </div>
             <div className="text-gray-600">You've Listened</div>
+          </div>
+          <div 
+            onClick={() => stats.queued > 0 && navigate('/browse?queue=true')}
+            className={`bg-white rounded-lg shadow p-6 text-center ${
+              stats.queued > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+            }`}
+          >
+            <div className="text-3xl font-bold text-yellow-500 mb-2">
+              {stats.queued.toLocaleString()}
+            </div>
+            <div className="text-gray-600">In Your Queue</div>
           </div>
         </div>
 
