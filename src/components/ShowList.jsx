@@ -30,6 +30,24 @@ const ListenedCheckbox = ({ listened, onChange }) => {
   );
 };
 
+// Bookmark button for want-to-listen
+const WantToListenButton = ({ wantToListen, onChange }) => {
+  return (
+    <button
+      onClick={() => onChange(!wantToListen)}
+      className={`text-lg transition-colors ${
+        wantToListen 
+          ? 'text-yellow-500' 
+          : 'text-gray-300 hover:text-yellow-400'
+      }`}
+      aria-label={wantToListen ? 'Remove from queue' : 'Add to queue'}
+      title={wantToListen ? 'In your queue' : 'Add to queue'}
+    >
+      {wantToListen ? '★' : '☆'}
+    </button>
+  );
+};
+
 function ShowList({ shows, showData, onUpdateShow, searchTerm, selectedYear }) {
   const navigate = useNavigate();
 
@@ -62,14 +80,19 @@ function ShowList({ shows, showData, onUpdateShow, searchTerm, selectedYear }) {
   }, {});
 
   const handleListenedChange = (showId, listened) => {
-    const currentData = showData[showId] || { notes: '' };
-    onUpdateShow(showId, listened, currentData.notes);
+    const currentData = showData[showId] || { notes: '', wantToListen: false };
+    onUpdateShow(showId, listened, currentData.notes, currentData.wantToListen);
+  };
+
+  const handleWantToListenChange = (showId, wantToListen) => {
+    const currentData = showData[showId] || { listened: false, notes: '' };
+    onUpdateShow(showId, currentData.listened, currentData.notes, wantToListen);
   };
 
   return (
     <div className="space-y-2">
       {sortedShows.map(show => {
-        const data = showData[show.id] || { listened: false, notes: '' };
+        const data = showData[show.id] || { listened: false, notes: '', wantToListen: false };
         const showNumber = show.showNumber || 1;
         const hasMultipleShowsThisDate = showCountsByDate[show.date] > 1;
         
@@ -90,6 +113,14 @@ function ShowList({ shows, showData, onUpdateShow, searchTerm, selectedYear }) {
                 onChange={(listened) => handleListenedChange(show.id, listened)}
               />
             </div>
+
+            {/* Want to listen bookmark - stop propagation */}
+            <div onClick={(e) => e.stopPropagation()}>
+              <WantToListenButton
+                wantToListen={data.wantToListen}
+                onChange={(wantToListen) => handleWantToListenChange(show.id, wantToListen)}
+              />
+            </div>
             
             {/* Show Info */}
             <div className="flex-grow min-w-0">
@@ -100,6 +131,11 @@ function ShowList({ shows, showData, onUpdateShow, searchTerm, selectedYear }) {
                 {hasMultipleShowsThisDate && (
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
                     {getShowLabel(showNumber)}
+                  </span>
+                )}
+                {show.band && show.band !== 'Grateful Dead' && (
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                    {show.band}
                   </span>
                 )}
                 {show.hasArchiveRecordings && (

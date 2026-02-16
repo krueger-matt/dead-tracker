@@ -14,6 +14,7 @@ function App() {
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showData, setShowData] = useState({}); // { showId: { listened, notes } }
+  const [selectedBand, setSelectedBand] = useState('Grateful Dead');
 
   // Load shows from Supabase on mount
   useEffect(() => {
@@ -35,40 +36,55 @@ function App() {
     loadShowData();
   }, []);
 
-  // Handle updating show listened/notes
-  const handleUpdateShow = async (showId, listened, notes) => {
-    const newData = await updateShowData(showId, listened, notes);
+  // Handle updating show listened/notes/wantToListen
+  const handleUpdateShow = async (showId, listened, notes, wantToListen) => {
+    const newData = await updateShowData(showId, listened, notes, wantToListen);
     setShowData(newData);
   };
 
-  // Get unique years from shows
-  const availableYears = useMemo(() => {
-    const years = [...new Set(shows.map(show => getYear(show.date)))];
-    return years.sort(); // Ascending order (1965 first)
+  // Get unique bands from shows
+  const availableBands = useMemo(() => {
+    const bands = [...new Set(shows.map(show => show.band))];
+    return bands.sort();
   }, [shows]);
 
-  // Calculate progress statistics
+  // Filter shows by selected band
+  const bandShows = useMemo(() => {
+    if (selectedBand === 'all') return shows;
+    return shows.filter(show => show.band === selectedBand);
+  }, [shows, selectedBand]);
+
+  // Get unique years from band-filtered shows
+  const availableYears = useMemo(() => {
+    const years = [...new Set(bandShows.map(show => getYear(show.date)))];
+    return years.sort(); // Ascending order
+  }, [bandShows]);
+
+  // Calculate progress statistics for selected band
   const stats = useMemo(() => {
-    const totalShows = shows.length;
-    const listenedShows = Object.keys(showData).filter(id => {
-      const data = showData[id];
+    const totalShows = bandShows.length;
+    const listenedShows = bandShows.filter(show => {
+      const data = showData[show.id];
       return data && data.listened;
     }).length;
     
-    const archiveShows = shows.filter(s => s.hasArchiveRecordings).length;
-    const listenedArchiveShows = Object.keys(showData).filter(id => {
-      const show = shows.find(s => s.id === id);
-      const data = showData[id];
-      return show && show.hasArchiveRecordings && data && data.listened;
+    const archiveShows = bandShows.filter(s => s.hasArchiveRecordings).length;
+    const listenedArchiveShows = bandShows.filter(show => {
+      const data = showData[show.id];
+      return show.hasArchiveRecordings && data && data.listened;
     }).length;
     
     return {
       total: totalShows,
       listened: listenedShows,
       archive: archiveShows,
-      listenedArchive: listenedArchiveShows
+      listenedArchive: listenedArchiveShows,
+      queued: bandShows.filter(show => {
+        const data = showData[show.id];
+        return data && data.wantToListen;
+      }).length
     };
-  }, [shows, showData]);
+  }, [bandShows, showData]);
 
   if (loading) {
     return (
@@ -90,6 +106,9 @@ function App() {
             <Home 
               availableYears={availableYears}
               stats={stats}
+              selectedBand={selectedBand}
+              onBandChange={setSelectedBand}
+              availableBands={availableBands}
             />
           } 
         />
@@ -97,11 +116,14 @@ function App() {
           path="/browse" 
           element={
             <Browse 
-              shows={shows}
+              shows={bandShows}
               showData={showData}
               onUpdateShow={handleUpdateShow}
               stats={stats}
               availableYears={availableYears}
+              selectedBand={selectedBand}
+              onBandChange={setSelectedBand}
+              availableBands={availableBands}
             />
           } 
         />

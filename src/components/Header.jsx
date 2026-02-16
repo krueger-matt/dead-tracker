@@ -9,7 +9,12 @@ const Header = ({
   availableYears,
   showArchiveOnly,
   onArchiveFilterChange,
-  stats
+  showQueueOnly,
+  onQueueFilterChange,
+  stats,
+  selectedBand,
+  onBandChange,
+  availableBands
 }) => {
   const navigate = useNavigate();
   const percentage = stats.total > 0 ? Math.round((stats.listened / stats.total) * 100) : 0;
@@ -24,6 +29,35 @@ const Header = ({
         >
           Dead Tracker
         </h1>
+
+        {/* Band Selector */}
+        {availableBands && availableBands.length > 1 && (
+          <div className="flex gap-2 flex-wrap mb-3">
+            {availableBands.map(band => (
+              <button
+                key={band}
+                onClick={() => onBandChange(band)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  selectedBand === band
+                    ? 'bg-white text-blue-600'
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                }`}
+              >
+                {band}
+              </button>
+            ))}
+            <button
+              onClick={() => onBandChange('all')}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                selectedBand === 'all'
+                  ? 'bg-white text-blue-600'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+            >
+              All Bands
+            </button>
+          </div>
+        )}
         
         {/* Stats */}
         <div className="mb-4">
@@ -73,6 +107,17 @@ const Header = ({
               className="w-4 h-4 rounded"
             />
             <span className="text-sm">Archive recordings only</span>
+          </label>
+
+          {/* Queue Filter */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showQueueOnly}
+              onChange={(e) => onQueueFilterChange(e.target.checked)}
+              className="w-4 h-4 rounded"
+            />
+            <span className="text-sm">★ Queue only</span>
           </label>
         </div>
       </div>

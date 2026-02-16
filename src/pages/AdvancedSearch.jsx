@@ -106,157 +106,116 @@ function AdvancedSearch() {
     setShowSong2Suggestions(false);
   };
 
-  // Find shows where song1 is followed by song2 (consecutive in same set)
-  const findSeguePairs = async (song1Name, song2Name) => {
-    // First, find the song IDs
-    const { data: songs } = await supabase
+  // Helper: look up a song ID by name
+  const findSongId = async (songName) => {
+    const { data } = await supabase
       .from('songs')
-      .select('id, name')
-      .ilike('name', song1Name);
+      .select('id')
+      .ilike('name', songName);
+    return data && data.length > 0 ? data[0].id : null;
+  };
 
-    if (!songs || songs.length === 0) return [];
-    const song1Id = songs[0].id;
-
-    const { data: songs2 } = await supabase
-      .from('songs')
-      .select('id, name')
-      .ilike('name', song2Name);
-
-    if (!songs2 || songs2.length === 0) return [];
-    const song2Id = songs2[0].id;
-
-    // Find all instances of song1
-    const { data: setlist1 } = await supabase
-      .from('setlists')
-      .select('show_id, set_name, position')
-      .eq('song_id', song1Id);
-
-    if (!setlist1 || setlist1.length === 0) return [];
-
-    // For each instance, check if the next song is song2
-    const matchingShowIds = [];
-    
-    for (const entry of setlist1) {
-      const { data: nextSong } = await supabase
-        .from('setlists')
-        .select('song_id')
-        .eq('show_id', entry.show_id)
-        .eq('set_name', entry.set_name)
-        .eq('position', entry.position + 1)
-        .single();
-
-      if (nextSong && nextSong.song_id === song2Id) {
-        matchingShowIds.push(entry.show_id);
-      }
-    }
-
-    if (matchingShowIds.length === 0) return [];
-
-    // Get show details
-    const { data: shows } = await supabase
+  // Helper: fetch show details for a list of IDs
+  const fetchShowsByIds = async (showIds) => {
+    if (showIds.length === 0) return [];
+    const { data } = await supabase
       .from('shows')
       .select('*')
-      .in('id', matchingShowIds)
+      .in('id', showIds)
       .order('date');
+    return data || [];
+  };
 
-    return shows || [];
+  // Find shows where song1 is followed by song2 (consecutive in same set)
+  const findSeguePairs = async (song1Name, song2Name) => {
+    const song1Id = await findSongId(song1Name);
+    if (!song1Id) return [];
+    const song2Id = await findSongId(song2Name);
+    if (!song2Id) return [];
+
+    // Fetch all setlist entries for both songs in parallel
+    const [{ data: entries1 }, { data: entries2 }] = await Promise.all([
+      supabase.from('setlists').select('show_id, set_name, position').eq('song_id', song1Id),
+      supabase.from('setlists').select('show_id, set_name, position').eq('song_id', song2Id)
+    ]);
+
+    if (!entries1 || !entries2) return [];
+
+    // Build a lookup of song2 appearances: "showId|setName|position" -> true
+    const song2Lookup = new Set(
+      entries2.map(e => `${e.show_id}|${e.set_name}|${e.position}`)
+    );
+
+    // Find shows where song1 at position N has song2 at position N+1 in the same set
+    const matchingShowIds = entries1
+      .filter(e => song2Lookup.has(`${e.show_id}|${e.set_name}|${e.position + 1}`))
+      .map(e => e.show_id);
+
+    return fetchShowsByIds([...new Set(matchingShowIds)]);
   };
 
   // Find shows where song1 appears but is NOT followed by song2
   const findWithoutSegue = async (song1Name, song2Name) => {
-    // Find all shows with song1
-    const { data: songs1 } = await supabase
-      .from('songs')
-      .select('id')
-      .ilike('name', song1Name);
+    const song1Id = await findSongId(song1Name);
+    if (!song1Id) return [];
+    const song2Id = await findSongId(song2Name);
+    if (!song2Id) return [];
 
-    if (!songs1 || songs1.length === 0) return [];
-    const song1Id = songs1[0].id;
+    // Fetch all setlist entries for both songs in parallel
+    const [{ data: entries1 }, { data: entries2 }] = await Promise.all([
+      supabase.from('setlists').select('show_id, set_name, position').eq('song_id', song1Id),
+      supabase.from('setlists').select('show_id, set_name, position').eq('song_id', song2Id)
+    ]);
 
-    const { data: showsWithSong1 } = await supabase
-      .from('setlists')
-      .select('show_id')
-      .eq('song_id', song1Id);
+    if (!entries1) return [];
 
-    if (!showsWithSong1) return [];
-    const allShowsWithSong1 = [...new Set(showsWithSong1.map(s => s.show_id))];
+    // Build a lookup of song2 appearances
+    const song2Lookup = new Set(
+      (entries2 || []).map(e => `${e.show_id}|${e.set_name}|${e.position}`)
+    );
 
-    // Find shows where song1 > song2
-    const showsWithSegue = await findSeguePairs(song1Name, song2Name);
-    const segueShowIds = new Set(showsWithSegue.map(s => s.id));
+    // Find shows where song1 is NOT followed by song2
+    const showsWithPair = new Set(
+      entries1
+        .filter(e => song2Lookup.has(`${e.show_id}|${e.set_name}|${e.position + 1}`))
+        .map(e => e.show_id)
+    );
 
-    // Filter out shows with the segue - these are orphan song1s
-    const orphanShowIds = allShowsWithSong1.filter(id => !segueShowIds.has(id));
+    const orphanShowIds = [...new Set(entries1.map(e => e.show_id))]
+      .filter(id => !showsWithPair.has(id));
 
-    if (orphanShowIds.length === 0) return [];
-
-    // Get show details
-    const { data: shows } = await supabase
-      .from('shows')
-      .select('*')
-      .in('id', orphanShowIds)
-      .order('date');
-
-    return shows || [];
+    return fetchShowsByIds(orphanShowIds);
   };
 
   // Find shows where song appears in specific set
   const findSongInSet = async (songName, setName) => {
-    const { data: songs } = await supabase
-      .from('songs')
-      .select('id')
-      .ilike('name', songName);
+    const songId = await findSongId(songName);
+    if (!songId) return [];
 
-    if (!songs || songs.length === 0) return [];
-    const songId = songs[0].id;
-
-    const { data: setlistEntries } = await supabase
+    const { data: entries } = await supabase
       .from('setlists')
       .select('show_id')
       .eq('song_id', songId)
       .eq('set_name', setName);
 
-    if (!setlistEntries || setlistEntries.length === 0) return [];
-    
-    const showIds = [...new Set(setlistEntries.map(s => s.show_id))];
-
-    const { data: shows } = await supabase
-      .from('shows')
-      .select('*')
-      .in('id', showIds)
-      .order('date');
-
-    return shows || [];
+    if (!entries || entries.length === 0) return [];
+    return fetchShowsByIds([...new Set(entries.map(e => e.show_id))]);
   };
 
   // Find shows where song is the opener of a set
   const findOpener = async (songName, setName) => {
-    const { data: songs } = await supabase
-      .from('songs')
-      .select('id')
-      .ilike('name', songName);
+    const songId = await findSongId(songName);
+    if (!songId) return [];
 
-    if (!songs || songs.length === 0) return [];
-    const songId = songs[0].id;
-
-    const { data: setlistEntries } = await supabase
+    const { data: entries } = await supabase
       .from('setlists')
       .select('show_id')
       .eq('song_id', songId)
       .eq('set_name', setName)
       .eq('position', 1);
 
-    if (!setlistEntries || setlistEntries.length === 0) return [];
-    
-    const showIds = [...new Set(setlistEntries.map(s => s.show_id))];
-
-    const { data: shows } = await supabase
-      .from('shows')
-      .select('*')
-      .in('id', showIds)
-      .order('date');
-
-    return shows || [];
+    if (!entries || entries.length === 0) return [];
+    return fetchShowsByIds([...new Set(entries.map(e => e.show_id))]);
   };
 
   const formatDate = (dateString) => {
@@ -368,30 +327,60 @@ function AdvancedSearch() {
           {/* Without Segue Query */}
           {queryType === 'without-segue' && (
             <>
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   First Song
                 </label>
                 <input
                   type="text"
                   value={song1}
-                  onChange={(e) => setSong1(e.target.value)}
+                  onChange={(e) => handleSong1Change(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
+                  onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
                   placeholder="e.g., China Cat Sunflower"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+                {showSong1Suggestions && song1Suggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {song1Suggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => selectSong1(suggestion)}
+                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        {suggestion}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="text-center text-gray-500 mb-4">NOT followed by</div>
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Second Song
                 </label>
                 <input
                   type="text"
                   value={song2}
-                  onChange={(e) => setSong2(e.target.value)}
+                  onChange={(e) => handleSong2Change(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowSong2Suggestions(false), 200)}
+                  onFocus={() => song2.length >= 2 && setShowSong2Suggestions(true)}
                   placeholder="e.g., I Know You Rider"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+                {showSong2Suggestions && song2Suggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {song2Suggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => selectSong2(suggestion)}
+                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        {suggestion}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -399,17 +388,32 @@ function AdvancedSearch() {
           {/* In Set Query */}
           {queryType === 'in-set' && (
             <>
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Song
                 </label>
                 <input
                   type="text"
                   value={song1}
-                  onChange={(e) => setSong1(e.target.value)}
+                  onChange={(e) => handleSong1Change(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
+                  onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
                   placeholder="e.g., Dark Star"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+                {showSong1Suggestions && song1Suggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {song1Suggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => selectSong1(suggestion)}
+                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        {suggestion}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -433,17 +437,32 @@ function AdvancedSearch() {
           {/* Opener Query */}
           {queryType === 'opener' && (
             <>
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Song
                 </label>
                 <input
                   type="text"
                   value={song1}
-                  onChange={(e) => setSong1(e.target.value)}
+                  onChange={(e) => handleSong1Change(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
+                  onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
                   placeholder="e.g., Promised Land"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+                {showSong1Suggestions && song1Suggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {song1Suggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => selectSong1(suggestion)}
+                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        {suggestion}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -490,8 +509,15 @@ function AdvancedSearch() {
                     onClick={() => navigate(`/show/${show.id}`)}
                     className="p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-md cursor-pointer transition-all"
                   >
-                    <div className="font-semibold text-gray-900">
-                      {formatDate(show.date)}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900">
+                        {formatDate(show.date)}
+                      </span>
+                      {show.band && show.band !== 'Grateful Dead' && (
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                          {show.band}
+                        </span>
+                      )}
                     </div>
                     <div className="text-sm text-gray-600">{show.venue}</div>
                     {(show.city || show.state) && (

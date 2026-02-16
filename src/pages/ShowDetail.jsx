@@ -23,7 +23,7 @@ function ShowDetail() {
   const navigate = useNavigate();
   const [show, setShow] = useState(null);
   const [setlist, setSetlist] = useState({});
-  const [showData, setShowData] = useState({ listened: false, notes: '' });
+  const [showData, setShowData] = useState({ listened: false, notes: '', wantToListen: false });
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -107,12 +107,17 @@ function ShowDetail() {
   };
 
   const handleListenedChange = async (listened) => {
-    await updateShowData(showId, listened, showData.notes);
+    await updateShowData(showId, listened, showData.notes, showData.wantToListen);
     setShowData({ ...showData, listened });
   };
 
+  const handleWantToListenChange = async (wantToListen) => {
+    await updateShowData(showId, showData.listened, showData.notes, wantToListen);
+    setShowData({ ...showData, wantToListen });
+  };
+
   const handleNotesSave = async () => {
-    await updateShowData(showId, showData.listened, notesText);
+    await updateShowData(showId, showData.listened, notesText, showData.wantToListen);
     setShowData({ ...showData, notes: notesText });
     setEditingNotes(false);
   };
@@ -155,6 +160,11 @@ function ShowDetail() {
           <h1 className="text-4xl font-bold mb-2">
             {formatDate(show.date)}
           </h1>
+          {show.band && show.band !== 'Grateful Dead' && (
+            <span className="inline-block bg-white/20 text-white px-3 py-1 rounded text-sm mb-2 mr-2">
+              {show.band}
+            </span>
+          )}
           {show.show_number > 1 && (
             <span className="inline-block bg-white/20 text-white px-3 py-1 rounded text-sm mb-2">
               {getShowLabel(show.show_number)}
@@ -171,20 +181,36 @@ function ShowDetail() {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Listened & Archive */}
+        {/* Listened & Queue & Archive */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showData.listened}
-                onChange={(e) => handleListenedChange(e.target.checked)}
-                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <span className="text-lg font-medium text-gray-900">
-                Mark as listened
-              </span>
-            </label>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showData.listened}
+                  onChange={(e) => handleListenedChange(e.target.checked)}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-lg font-medium text-gray-900">
+                  Listened
+                </span>
+              </label>
+
+              <button
+                onClick={() => handleWantToListenChange(!showData.wantToListen)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                  showData.wantToListen
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-gray-100 text-gray-500 hover:bg-yellow-50 hover:text-yellow-600'
+                }`}
+              >
+                <span className="text-lg">{showData.wantToListen ? '★' : '☆'}</span>
+                <span className="text-sm font-medium">
+                  {showData.wantToListen ? 'In queue' : 'Add to queue'}
+                </span>
+              </button>
+            </div>
 
             {show.has_archive_recordings && (
               <a
