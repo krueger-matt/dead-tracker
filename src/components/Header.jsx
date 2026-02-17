@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const Header = ({ 
-  searchTerm, 
-  onSearchChange, 
+const Header = ({
+  searchTerm,
+  onSearchChange,
   selectedYear,
   onYearChange,
   availableYears,
@@ -11,6 +11,8 @@ const Header = ({
   onArchiveFilterChange,
   showQueueOnly,
   onQueueFilterChange,
+  showListenedOnly,
+  onListenedFilterChange,
   stats,
   selectedBand,
   onBandChange,
@@ -110,7 +112,7 @@ const Header = ({
           </label>
 
           {/* Queue Filter */}
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer" title="Show only shows in your queue">
             <input
               type="checkbox"
               checked={showQueueOnly}
@@ -118,6 +120,17 @@ const Header = ({
               className="w-4 h-4 rounded"
             />
             <span className="text-sm">★ Queue only</span>
+          </label>
+
+          {/* Listened Filter */}
+          <label className="flex items-center gap-2 cursor-pointer" title="Show only shows you have listened to">
+            <input
+              type="checkbox"
+              checked={showListenedOnly}
+              onChange={(e) => onListenedFilterChange(e.target.checked)}
+              className="w-4 h-4 rounded"
+            />
+            <span className="text-sm">✓ Listened only</span>
           </label>
         </div>
       </div>

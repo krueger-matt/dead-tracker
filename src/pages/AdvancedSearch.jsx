@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabaseService';
 
 function AdvancedSearch() {
   const navigate = useNavigate();
-  const [queryType, setQueryType] = useState('segue');
-  const [song1, setSong1] = useState('');
-  const [song2, setSong2] = useState('');
-  const [setName, setSetName] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [queryType, setQueryType] = useState(searchParams.get('type') || 'segue');
+  const [song1, setSong1] = useState(searchParams.get('song1') || '');
+  const [song2, setSong2] = useState(searchParams.get('song2') || '');
+  const [setName, setSetName] = useState(searchParams.get('set') || '');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [allSongs, setAllSongs] = useState([]);
   const [song1Suggestions, setSong1Suggestions] = useState([]);
   const [song2Suggestions, setSong2Suggestions] = useState([]);
@@ -24,7 +27,7 @@ function AdvancedSearch() {
         .from('songs')
         .select('name')
         .order('name');
-      
+
       if (data) {
         setAllSongs(data.map(s => s.name));
       }
@@ -32,9 +35,27 @@ function AdvancedSearch() {
     loadSongs();
   }, []);
 
+  // Auto-search if returning to page with URL params
+  useEffect(() => {
+    if (allSongs.length > 0 && !initialLoadDone) {
+      setInitialLoadDone(true);
+      if (searchParams.has('song1')) {
+        handleSearch();
+      }
+    }
+  }, [allSongs, initialLoadDone, searchParams]);
+
   const handleSearch = async () => {
     setSearching(true);
     setSearched(true);
+
+    // Update URL with search params
+    const params = { type: queryType };
+    if (song1) params.song1 = song1;
+    if (song2) params.song2 = song2;
+    if (setName) params.set = setName;
+    setSearchParams(params, { replace: true });
+
     let matchingShows = [];
 
     try {

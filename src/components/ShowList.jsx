@@ -25,6 +25,7 @@ const ListenedCheckbox = ({ listened, onChange }) => {
         onChange={(e) => onChange(e.target.checked)}
         className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
         aria-label="Mark as listened"
+        title={listened ? "Marked as listened" : "Mark as listened"}
       />
     </div>
   );
@@ -36,14 +37,32 @@ const WantToListenButton = ({ wantToListen, onChange }) => {
     <button
       onClick={() => onChange(!wantToListen)}
       className={`text-lg transition-colors ${
-        wantToListen 
-          ? 'text-yellow-500' 
+        wantToListen
+          ? 'text-yellow-500'
           : 'text-gray-300 hover:text-yellow-400'
       }`}
       aria-label={wantToListen ? 'Remove from queue' : 'Add to queue'}
       title={wantToListen ? 'In your queue' : 'Add to queue'}
     >
       {wantToListen ? '★' : '☆'}
+    </button>
+  );
+};
+
+// Attended button for shows you've been to
+const AttendedButton = ({ attended, onChange }) => {
+  return (
+    <button
+      onClick={() => onChange(!attended)}
+      className={`text-lg transition-colors ${
+        attended
+          ? 'text-purple-600'
+          : 'text-gray-300 hover:text-purple-500'
+      }`}
+      aria-label={attended ? 'Marked as attended' : 'Mark as attended'}
+      title={attended ? 'You were there!' : 'Mark as attended'}
+    >
+      {attended ? '●' : '○'}
     </button>
   );
 };
@@ -80,35 +99,40 @@ function ShowList({ shows, showData, onUpdateShow, searchTerm, selectedYear }) {
   }, {});
 
   const handleListenedChange = (showId, listened) => {
-    const currentData = showData[showId] || { notes: '', wantToListen: false };
-    onUpdateShow(showId, listened, currentData.notes, currentData.wantToListen);
+    const currentData = showData[showId] || { notes: '', wantToListen: false, attended: false };
+    onUpdateShow(showId, listened, currentData.notes, currentData.wantToListen, currentData.attended);
   };
 
   const handleWantToListenChange = (showId, wantToListen) => {
-    const currentData = showData[showId] || { listened: false, notes: '' };
-    onUpdateShow(showId, currentData.listened, currentData.notes, wantToListen);
+    const currentData = showData[showId] || { listened: false, notes: '', attended: false };
+    onUpdateShow(showId, currentData.listened, currentData.notes, wantToListen, currentData.attended);
+  };
+
+  const handleAttendedChange = (showId, attended) => {
+    const currentData = showData[showId] || { listened: false, notes: '', wantToListen: false };
+    onUpdateShow(showId, currentData.listened, currentData.notes, currentData.wantToListen, attended);
   };
 
   return (
     <div className="space-y-2">
       {sortedShows.map(show => {
-        const data = showData[show.id] || { listened: false, notes: '', wantToListen: false };
+        const data = showData[show.id] || { listened: false, notes: '', wantToListen: false, attended: false };
         const showNumber = show.showNumber || 1;
         const hasMultipleShowsThisDate = showCountsByDate[show.date] > 1;
-        
+
         return (
           <div
             key={show.id}
             onClick={() => navigate(`/show/${show.id}`)}
             className={`rounded-lg border p-4 cursor-pointer flex items-center gap-4 ${
-              show.hasArchiveRecordings 
-                ? 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-md' 
+              show.hasArchiveRecordings
+                ? 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-md'
                 : 'bg-gray-50 border-gray-100 hover:border-gray-300'
             } transition-all`}
           >
             {/* Listened checkbox - stop propagation */}
             <div onClick={(e) => e.stopPropagation()}>
-              <ListenedCheckbox 
+              <ListenedCheckbox
                 listened={data.listened}
                 onChange={(listened) => handleListenedChange(show.id, listened)}
               />
@@ -119,6 +143,14 @@ function ShowList({ shows, showData, onUpdateShow, searchTerm, selectedYear }) {
               <WantToListenButton
                 wantToListen={data.wantToListen}
                 onChange={(wantToListen) => handleWantToListenChange(show.id, wantToListen)}
+              />
+            </div>
+
+            {/* Attended button - stop propagation */}
+            <div onClick={(e) => e.stopPropagation()}>
+              <AttendedButton
+                attended={data.attended}
+                onChange={(attended) => handleAttendedChange(show.id, attended)}
               />
             </div>
             
@@ -141,6 +173,11 @@ function ShowList({ shows, showData, onUpdateShow, searchTerm, selectedYear }) {
                 {show.hasArchiveRecordings && (
                   <span className="text-xl" title="Available on archive.org">
                     🎵
+                  </span>
+                )}
+                {show.hasSetlist && (
+                  <span className="text-xl" title="Has setlist">
+                    📋
                   </span>
                 )}
                 {data.notes && (
