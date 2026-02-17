@@ -23,7 +23,7 @@ function ShowDetail() {
   const navigate = useNavigate();
   const [show, setShow] = useState(null);
   const [setlist, setSetlist] = useState({});
-  const [showData, setShowData] = useState({ listened: false, notes: '', wantToListen: false });
+  const [showData, setShowData] = useState({ listened: false, notes: '', wantToListen: false, attended: false });
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -107,17 +107,22 @@ function ShowDetail() {
   };
 
   const handleListenedChange = async (listened) => {
-    await updateShowData(showId, listened, showData.notes, showData.wantToListen);
+    await updateShowData(showId, listened, showData.notes, showData.wantToListen, showData.attended);
     setShowData({ ...showData, listened });
   };
 
   const handleWantToListenChange = async (wantToListen) => {
-    await updateShowData(showId, showData.listened, showData.notes, wantToListen);
+    await updateShowData(showId, showData.listened, showData.notes, wantToListen, showData.attended);
     setShowData({ ...showData, wantToListen });
   };
 
+  const handleAttendedChange = async (attended) => {
+    await updateShowData(showId, showData.listened, showData.notes, showData.wantToListen, attended);
+    setShowData({ ...showData, attended });
+  };
+
   const handleNotesSave = async () => {
-    await updateShowData(showId, showData.listened, notesText, showData.wantToListen);
+    await updateShowData(showId, showData.listened, notesText, showData.wantToListen, showData.attended);
     setShowData({ ...showData, notes: notesText });
     setEditingNotes(false);
   };
@@ -143,7 +148,15 @@ function ShowDetail() {
     );
   }
 
-  const archiveUrl = `https://archive.org/search.php?query=collection%3AGratefulDead%20AND%20date%3A${show.date}`;
+  // Construct archive.org URL based on band
+  const getArchiveUrl = () => {
+    const collection = show.band === 'Dead & Company'
+      ? 'DeadAndCompany'
+      : 'GratefulDead';
+    return `https://archive.org/search.php?query=collection%3A${collection}%20AND%20date%3A${show.date}`;
+  };
+
+  const archiveUrl = getArchiveUrl();
   const hasMultipleSets = Object.keys(setlist).length > 0;
 
   return (
@@ -208,6 +221,20 @@ function ShowDetail() {
                 <span className="text-lg">{showData.wantToListen ? '★' : '☆'}</span>
                 <span className="text-sm font-medium">
                   {showData.wantToListen ? 'In queue' : 'Add to queue'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleAttendedChange(!showData.attended)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                  showData.attended
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-500 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <span className="text-lg">{showData.attended ? '●' : '○'}</span>
+                <span className="text-sm font-medium">
+                  {showData.attended ? 'You were there!' : 'Mark as attended'}
                 </span>
               </button>
             </div>

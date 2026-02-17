@@ -69,26 +69,39 @@ function Home({ availableYears, stats, selectedBand, onBandChange, availableBand
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-12">
+          <div
+            onClick={() => navigate('/browse')}
+            className="bg-white rounded-lg shadow p-6 text-center cursor-pointer hover:shadow-md transition-shadow"
+          >
             <div className="text-3xl font-bold text-blue-600 mb-2">
               {stats.total.toLocaleString()}
             </div>
             <div className="text-gray-600">Total Shows</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+          <div
+            onClick={() => stats.archive > 0 && navigate('/browse?archive=true')}
+            className={`bg-white rounded-lg shadow p-6 text-center ${
+              stats.archive > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+            }`}
+          >
             <div className="text-3xl font-bold text-green-600 mb-2">
               {stats.archive.toLocaleString()}
             </div>
             <div className="text-gray-600">Available on Archive</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+          <div
+            onClick={() => stats.listened > 0 && navigate('/browse?listened=true')}
+            className={`bg-white rounded-lg shadow p-6 text-center ${
+              stats.listened > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+            }`}
+          >
             <div className="text-3xl font-bold text-purple-600 mb-2">
               {stats.listened.toLocaleString()}
             </div>
             <div className="text-gray-600">You've Listened</div>
           </div>
-          <div 
+          <div
             onClick={() => stats.queued > 0 && navigate('/browse?queue=true')}
             className={`bg-white rounded-lg shadow p-6 text-center ${
               stats.queued > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
@@ -98,6 +111,17 @@ function Home({ availableYears, stats, selectedBand, onBandChange, availableBand
               {stats.queued.toLocaleString()}
             </div>
             <div className="text-gray-600">In Your Queue</div>
+          </div>
+          <div
+            onClick={() => stats.attended > 0 && navigate('/stats/attended')}
+            className={`bg-white rounded-lg shadow p-6 text-center ${
+              stats.attended > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+            }`}
+          >
+            <div className="text-3xl font-bold text-purple-600 mb-2">
+              {stats.attended.toLocaleString()}
+            </div>
+            <div className="text-gray-600">You've Attended</div>
           </div>
         </div>
 
@@ -116,7 +140,7 @@ function Home({ availableYears, stats, selectedBand, onBandChange, availableBand
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="e.g., Fillmore, Cornell, Dark Star, 1977-05-08"
+                  placeholder="e.g., Fillmore, Cornell, Dark Star, May 8, 1977"
                   className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <button
@@ -155,9 +179,15 @@ function Home({ availableYears, stats, selectedBand, onBandChange, availableBand
             </button>
             <button
               onClick={() => navigate('/advanced-search')}
-              className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+              className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium mb-3"
             >
               🔍 Advanced Setlist Search
+            </button>
+            <button
+              onClick={() => navigate('/stats')}
+              className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+            >
+              📊 Your Listening Stats
             </button>
           </div>
         </div>

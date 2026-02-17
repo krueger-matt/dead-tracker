@@ -3,17 +3,19 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabaseService';
 import Header from '../components/Header';
 import ShowList from '../components/ShowList';
+import { dateMatchesSearch } from '../utils/dateParser';
 
 function Browse({ shows, showData, onUpdateShow, stats, availableYears, selectedBand, onBandChange, availableBands }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [showQueueOnly, setShowQueueOnly] = useState(searchParams.get('queue') === 'true');
+  const [showListenedOnly, setShowListenedOnly] = useState(searchParams.get('listened') === 'true');
   const [selectedYear, setSelectedYear] = useState(
-    searchParams.get('queue') === 'true' ? 'all' :
-    searchParams.get('year') || 
+    searchParams.get('queue') === 'true' || searchParams.get('listened') === 'true' || searchParams.get('archive') === 'true' ? 'all' :
+    searchParams.get('year') ||
     (searchParams.get('search') ? 'all' : availableYears[0] || '')
   );
-  const [showArchiveOnly, setShowArchiveOnly] = useState(false);
+  const [showArchiveOnly, setShowArchiveOnly] = useState(searchParams.get('archive') === 'true');
   const [showsWithSongs, setShowsWithSongs] = useState(new Set());
   const [searchingSongs, setSearchingSongs] = useState(false);
 
@@ -22,12 +24,35 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears, selected
     setShowQueueOnly(enabled);
     if (enabled) {
       setSelectedYear('all');
+      setShowListenedOnly(false); // Can't show both filters at once
     }
   };
 
-  // Scroll to top when component mounts
+  // Handle listened filter toggle - switch to all years when enabling
+  const handleListenedFilterChange = (enabled) => {
+    setShowListenedOnly(enabled);
+    if (enabled) {
+      setSelectedYear('all');
+      setShowQueueOnly(false); // Can't show both filters at once
+    }
+  };
+
+  // Save scroll position when leaving the page
   useEffect(() => {
-    window.scrollTo(0, 0);
+    const handleScroll = () => {
+      sessionStorage.setItem('browseScrollPosition', window.scrollY.toString());
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Restore scroll position when returning to the page
+  useEffect(() => {
+    const savedPosition = sessionStorage.getItem('browseScrollPosition');
+    if (savedPosition) {
+      window.scrollTo(0, parseInt(savedPosition, 10));
+    }
   }, []);
 
   // Search for shows with matching songs
@@ -76,17 +101,33 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears, selected
     const params = {};
     if (searchTerm) params.search = searchTerm;
     if (selectedYear && selectedYear !== 'all') params.year = selectedYear;
-    setSearchParams(params, { replace: true });
-  }, [searchTerm, selectedYear, setSearchParams]);
+
+    // Only update URL if params actually changed
+    const currentSearch = searchParams.get('search') || '';
+    const currentYear = searchParams.get('year') || '';
+    const newSearch = params.search || '';
+    const newYear = params.year || '';
+
+    if (currentSearch !== newSearch || currentYear !== newYear) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [searchTerm, selectedYear, searchParams, setSearchParams]);
 
   // Filter shows based on search, year, and archive filter
   const filteredShows = useMemo(() => {
     return shows.filter(show => {
-      const matchesSearch = searchTerm === '' || 
-        show.venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        show.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        show.date.includes(searchTerm) ||
-        showsWithSongs.has(show.id); // Include shows with matching songs
+      // Check if search term is a 2-letter all-caps state abbreviation
+      const isStateAbbreviation = searchTerm.length === 2 && searchTerm === searchTerm.toUpperCase();
+
+      const matchesSearch = searchTerm === '' ||
+        (isStateAbbreviation
+          ? show.state === searchTerm  // Only match state for all-caps 2-letter codes
+          : show.venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            show.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            show.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            dateMatchesSearch(show.date, searchTerm) ||
+            showsWithSongs.has(show.id) // Include shows with matching songs
+        );
       
       const matchesYear = selectedYear === 'all' || 
         show.date.startsWith(selectedYear);
@@ -94,8 +135,10 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears, selected
       const matchesArchive = !showArchiveOnly || show.hasArchiveRecordings;
 
       const matchesQueue = !showQueueOnly || (showData[show.id] && showData[show.id].wantToListen);
-      
-      return matchesSearch && matchesYear && matchesArchive && matchesQueue;
+
+      const matchesListened = !showListenedOnly || (showData[show.id] && showData[show.id].listened);
+
+      return matchesSearch && matchesYear && matchesArchive && matchesQueue && matchesListened;
     });
   }, [shows, searchTerm, selectedYear, showArchiveOnly, showQueueOnly, showsWithSongs, showData]);
 
@@ -123,7 +166,7 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears, selected
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header 
+      <Header
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         selectedYear={selectedYear}
@@ -133,6 +176,8 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears, selected
         onArchiveFilterChange={setShowArchiveOnly}
         showQueueOnly={showQueueOnly}
         onQueueFilterChange={handleQueueFilterChange}
+        showListenedOnly={showListenedOnly}
+        onListenedFilterChange={handleListenedFilterChange}
         stats={filteredStats}
         selectedBand={selectedBand}
         onBandChange={onBandChange}
@@ -140,7 +185,7 @@ function Browse({ shows, showData, onUpdateShow, stats, availableYears, selected
       />
       
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <ShowList 
+        <ShowList
           shows={filteredShows}
           showData={showData}
           onUpdateShow={onUpdateShow}

@@ -5,6 +5,8 @@ import Home from './pages/Home';
 import Browse from './pages/Browse';
 import ShowDetail from './pages/ShowDetail';
 import AdvancedSearch from './pages/AdvancedSearch';
+import Stats from './pages/Stats';
+import AttendedStats from './pages/AttendedStats';
 import { fetchShows, getShowData, updateShowData } from './services/supabaseService';
 
 // Helper to get year from date string
@@ -14,7 +16,9 @@ function App() {
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showData, setShowData] = useState({}); // { showId: { listened, notes } }
-  const [selectedBand, setSelectedBand] = useState('Grateful Dead');
+  const [selectedBand, setSelectedBand] = useState(() => {
+    return localStorage.getItem('selectedBand') || 'Grateful Dead';
+  });
 
   // Load shows from Supabase on mount
   useEffect(() => {
@@ -36,10 +40,16 @@ function App() {
     loadShowData();
   }, []);
 
-  // Handle updating show listened/notes/wantToListen
-  const handleUpdateShow = async (showId, listened, notes, wantToListen) => {
-    const newData = await updateShowData(showId, listened, notes, wantToListen);
+  // Handle updating show listened/notes/wantToListen/attended
+  const handleUpdateShow = async (showId, listened, notes, wantToListen, attended) => {
+    const newData = await updateShowData(showId, listened, notes, wantToListen, attended);
     setShowData(newData);
+  };
+
+  // Handle band change and persist to localStorage
+  const handleBandChange = (band) => {
+    setSelectedBand(band);
+    localStorage.setItem('selectedBand', band);
   };
 
   // Get unique bands from shows
@@ -67,13 +77,13 @@ function App() {
       const data = showData[show.id];
       return data && data.listened;
     }).length;
-    
+
     const archiveShows = bandShows.filter(s => s.hasArchiveRecordings).length;
     const listenedArchiveShows = bandShows.filter(show => {
       const data = showData[show.id];
       return show.hasArchiveRecordings && data && data.listened;
     }).length;
-    
+
     return {
       total: totalShows,
       listened: listenedShows,
@@ -82,6 +92,10 @@ function App() {
       queued: bandShows.filter(show => {
         const data = showData[show.id];
         return data && data.wantToListen;
+      }).length,
+      attended: bandShows.filter(show => {
+        const data = showData[show.id];
+        return data && data.attended;
       }).length
     };
   }, [bandShows, showData]);
@@ -100,40 +114,64 @@ function App() {
   return (
     <BrowserRouter basename="/dead-tracker">
       <Routes>
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
-            <Home 
+            <Home
               availableYears={availableYears}
               stats={stats}
               selectedBand={selectedBand}
-              onBandChange={setSelectedBand}
+              onBandChange={handleBandChange}
               availableBands={availableBands}
             />
-          } 
+          }
         />
-        <Route 
-          path="/browse" 
+        <Route
+          path="/browse"
           element={
-            <Browse 
+            <Browse
               shows={bandShows}
               showData={showData}
               onUpdateShow={handleUpdateShow}
               stats={stats}
               availableYears={availableYears}
               selectedBand={selectedBand}
-              onBandChange={setSelectedBand}
+              onBandChange={handleBandChange}
               availableBands={availableBands}
             />
-          } 
+          }
         />
-        <Route 
-          path="/show/:showId" 
-          element={<ShowDetail />} 
+        <Route
+          path="/show/:showId"
+          element={<ShowDetail />}
         />
-        <Route 
-          path="/advanced-search" 
-          element={<AdvancedSearch />} 
+        <Route
+          path="/advanced-search"
+          element={<AdvancedSearch />}
+        />
+        <Route
+          path="/stats"
+          element={
+            <Stats
+              shows={bandShows}
+              showData={showData}
+              selectedBand={selectedBand}
+              onBandChange={handleBandChange}
+              availableBands={availableBands}
+            />
+          }
+        />
+        <Route
+          path="/stats/attended"
+          element={
+            <AttendedStats
+              shows={bandShows}
+              showData={showData}
+              selectedBand={selectedBand}
+              onBandChange={handleBandChange}
+              availableBands={availableBands}
+            />
+          }
         />
       </Routes>
     </BrowserRouter>
