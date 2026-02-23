@@ -10,6 +10,7 @@ function AdvancedSearch() {
   const [song1, setSong1] = useState(searchParams.get('song1') || '');
   const [song2, setSong2] = useState(searchParams.get('song2') || '');
   const [setName, setSetName] = useState(searchParams.get('set') || '');
+  const [band, setBand] = useState(searchParams.get('band') || '');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -54,6 +55,7 @@ function AdvancedSearch() {
     if (song1) params.song1 = song1;
     if (song2) params.song2 = song2;
     if (setName) params.set = setName;
+    if (band) params.band = band;
     setSearchParams(params, { replace: true });
 
     let matchingShows = [];
@@ -71,6 +73,9 @@ function AdvancedSearch() {
       } else if (queryType === 'opener') {
         // Find "Song1 as opener"
         matchingShows = await findOpener(song1, setName);
+      } else if (queryType === 'not-played') {
+        // Find shows where Song1 was NOT played
+        matchingShows = await findSongNotPlayed(song1);
       }
 
       setResults(matchingShows);
@@ -139,11 +144,17 @@ function AdvancedSearch() {
   // Helper: fetch show details for a list of IDs
   const fetchShowsByIds = async (showIds) => {
     if (showIds.length === 0) return [];
-    const { data } = await supabase
+    let query = supabase
       .from('shows')
       .select('*')
-      .in('id', showIds)
-      .order('date');
+      .in('id', showIds);
+
+    // Filter by band if specified
+    if (band) {
+      query = query.eq('band', band);
+    }
+
+    const { data } = await query.order('date');
     return data || [];
   };
 
@@ -239,6 +250,48 @@ function AdvancedSearch() {
     return fetchShowsByIds([...new Set(entries.map(e => e.show_id))]);
   };
 
+  // Find shows where song was NOT played
+  const findSongNotPlayed = async (songName) => {
+    const songId = await findSongId(songName);
+
+    // Build query for all shows with optional band filter
+    let allShowsQuery = supabase
+      .from('shows')
+      .select('*');
+
+    if (band) {
+      allShowsQuery = allShowsQuery.eq('band', band);
+    }
+
+    if (!songId) {
+      // If song doesn't exist, return all shows (filtered by band)
+      const { data: allShows } = await allShowsQuery.order('date');
+      return allShows || [];
+    }
+
+    // Get all shows (filtered by band)
+    const { data: allShows } = await allShowsQuery.order('date');
+
+    if (!allShows || allShows.length === 0) return [];
+
+    // Get show IDs for the filtered band
+    const allShowIds = allShows.map(s => s.id);
+
+    // Get shows from this band that have this song
+    const { data: showsWithSong } = await supabase
+      .from('setlists')
+      .select('show_id')
+      .eq('song_id', songId)
+      .in('show_id', allShowIds);
+
+    const showIdsWithSong = new Set(
+      (showsWithSong || []).map(e => e.show_id)
+    );
+
+    // Filter to shows that DON'T have the song
+    return allShows.filter(show => !showIdsWithSong.has(show.id));
+  };
+
   const formatDate = (dateString) => {
     const [year, month, day] = dateString.split('-');
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
@@ -281,6 +334,23 @@ function AdvancedSearch() {
               <option value="without-segue">Song NOT followed by another song</option>
               <option value="in-set">Song played in a specific set</option>
               <option value="opener">Song as set opener</option>
+              <option value="not-played">Shows where song was NOT played</option>
+            </select>
+          </div>
+
+          {/* Band Filter */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Band
+            </label>
+            <select
+              value={band}
+              onChange={(e) => setBand(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Bands</option>
+              <option value="Grateful Dead">Grateful Dead</option>
+              <option value="Dead & Company">Dead & Company</option>
             </select>
           </div>
 
@@ -502,6 +572,40 @@ function AdvancedSearch() {
                 </select>
               </div>
             </>
+          )}
+
+          {/* Not Played Query */}
+          {queryType === 'not-played' && (
+            <div className="mb-4 relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Song NOT Played
+              </label>
+              <input
+                type="text"
+                value={song1}
+                onChange={(e) => handleSong1Change(e.target.value)}
+                onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
+                onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
+                placeholder="e.g., Dark Star"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              {showSong1Suggestions && song1Suggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {song1Suggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      onClick={() => selectSong1(suggestion)}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    >
+                      {suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-sm text-gray-500 mt-2">
+                Find all shows where this song was not performed
+              </p>
+            </div>
           )}
 
           <button

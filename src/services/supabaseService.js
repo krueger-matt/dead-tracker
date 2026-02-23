@@ -12,20 +12,33 @@ export async function fetchShows() {
   let page = 0;
   let hasMore = true;
 
-  // Get all show IDs that have setlists (with high limit to get all rows)
-  const { data: setlistData } = await supabase
-    .from('setlists')
-    .select('show_id')
-    .limit(10000);
+  // Get all show IDs that have setlists (with pagination to get all rows)
+  let allSetlists = [];
+  let setlistPage = 0;
+  let hasMoreSetlists = true;
+  const SETLIST_PAGE_SIZE = 1000;
+
+  while (hasMoreSetlists) {
+    const { data: setlistData } = await supabase
+      .from('setlists')
+      .select('show_id')
+      .range(setlistPage * SETLIST_PAGE_SIZE, (setlistPage + 1) * SETLIST_PAGE_SIZE - 1);
+
+    if (setlistData && setlistData.length > 0) {
+      allSetlists = [...allSetlists, ...setlistData];
+      hasMoreSetlists = setlistData.length === SETLIST_PAGE_SIZE;
+      setlistPage++;
+    } else {
+      hasMoreSetlists = false;
+    }
+  }
 
   const showIdsWithSetlists = new Set(
-    setlistData ? setlistData.map(item => item.show_id) : []
+    allSetlists.map(item => item.show_id)
   );
 
-  console.log('Fetched setlist rows:', setlistData?.length || 0);
+  console.log('Fetched setlist rows:', allSetlists.length);
   console.log('Unique show IDs with setlists:', showIdsWithSetlists.size);
-  const dcSetlists = Array.from(showIdsWithSetlists).filter(id => id && id.startsWith('dc2024'));
-  console.log('Dead & Company shows with setlists:', dcSetlists.length, dcSetlists.slice(0, 5));
 
   while (hasMore) {
     const { data, error } = await supabase
