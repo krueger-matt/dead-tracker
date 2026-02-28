@@ -76,6 +76,27 @@ export function parseHumanDate(input) {
 export function dateMatchesSearch(showDate, searchTerm) {
   if (!searchTerm) return true;
 
+  const trimmed = searchTerm.trim();
+
+  // Check for MM/DD or MM-DD format (matches across all years)
+  const monthDaySlash = trimmed.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (monthDaySlash) {
+    const [, month, day] = monthDaySlash;
+    const paddedMonth = month.padStart(2, '0');
+    const paddedDay = day.padStart(2, '0');
+    const monthDayPattern = `-${paddedMonth}-${paddedDay}`;
+    return showDate.endsWith(monthDayPattern);
+  }
+
+  const monthDayDash = trimmed.match(/^(\d{1,2})-(\d{1,2})$/);
+  if (monthDayDash) {
+    const [, month, day] = monthDayDash;
+    const paddedMonth = month.padStart(2, '0');
+    const paddedDay = day.padStart(2, '0');
+    const monthDayPattern = `-${paddedMonth}-${paddedDay}`;
+    return showDate.endsWith(monthDayPattern);
+  }
+
   // Direct substring match (handles partial dates like "1972" or "1972-04")
   if (showDate.includes(searchTerm)) {
     return true;
