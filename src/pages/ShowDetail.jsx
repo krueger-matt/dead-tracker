@@ -150,9 +150,20 @@ function ShowDetail() {
 
   // Construct archive.org URL based on band
   const getArchiveUrl = () => {
-    const collection = show.band === 'Dead & Company'
-      ? 'DeadAndCompany'
-      : 'GratefulDead';
+    let collection;
+    if (show.band === 'Dead & Company') {
+      collection = 'DeadAndCompany';
+    } else if (show.band === 'Furthur') {
+      collection = 'Furthur';
+    } else if (show.band === 'The Other Ones') {
+      collection = 'TheOtherOnes';
+    } else if (show.band === 'Phil Lesh and Friends' || show.band === 'Phil Lesh And Friends') {
+      collection = 'PhilLeshAndFriends';
+    } else if (show.band === 'Bob Weir and Wolf Bros') {
+      collection = 'BobWeirAndWolfBros';
+    } else {
+      collection = 'GratefulDead';
+    }
     return `https://archive.org/search.php?query=collection%3A${collection}%20AND%20date%3A${show.date}`;
   };
 

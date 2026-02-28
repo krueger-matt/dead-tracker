@@ -20,8 +20,11 @@ function AdvancedSearch() {
   const [song2Suggestions, setSong2Suggestions] = useState([]);
   const [showSong1Suggestions, setShowSong1Suggestions] = useState(false);
   const [showSong2Suggestions, setShowSong2Suggestions] = useState(false);
+  const [availableBands, setAvailableBands] = useState([]);
+  const [selectedSong1Index, setSelectedSong1Index] = useState(-1);
+  const [selectedSong2Index, setSelectedSong2Index] = useState(-1);
 
-  // Load all songs on mount
+  // Load all songs and bands on mount
   useEffect(() => {
     const loadSongs = async () => {
       const { data } = await supabase
@@ -33,7 +36,42 @@ function AdvancedSearch() {
         setAllSongs(data.map(s => s.name));
       }
     };
+
+    const loadBands = async () => {
+      // Fetch all shows with pagination to get all bands
+      let allShows = [];
+      let page = 0;
+      let hasMore = true;
+      const PAGE_SIZE = 1000;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('shows')
+          .select('band')
+          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+        if (error) {
+          console.error('Error loading bands:', error);
+          break;
+        }
+
+        if (data && data.length > 0) {
+          allShows = [...allShows, ...data];
+          hasMore = data.length === PAGE_SIZE;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      console.log('Loading bands - total shows:', allShows.length);
+      const uniqueBands = [...new Set(allShows.map(show => show.band))].sort();
+      console.log('Unique bands found:', uniqueBands);
+      setAvailableBands(uniqueBands);
+    };
+
     loadSongs();
+    loadBands();
   }, []);
 
   // Auto-search if returning to page with URL params
@@ -61,9 +99,15 @@ function AdvancedSearch() {
     let matchingShows = [];
 
     try {
-      if (queryType === 'segue') {
+      if (queryType === 'played') {
+        // Find shows where Song1 was played
+        matchingShows = await findSongPlayed(song1);
+      } else if (queryType === 'segue') {
         // Find "Song1 > Song2" (segue pairs)
         matchingShows = await findSeguePairs(song1, song2);
+      } else if (queryType === 'not-preceded-by') {
+        // Find "Song2 played but NOT after Song1"
+        matchingShows = await findNotPrecededBy(song1, song2);
       } else if (queryType === 'without-segue') {
         // Find "Song2 NOT after Song1"
         matchingShows = await findWithoutSegue(song1, song2);
@@ -98,6 +142,7 @@ function AdvancedSearch() {
   // Handle song1 input change
   const handleSong1Change = (value) => {
     setSong1(value);
+    setSelectedSong1Index(-1);
     if (value.length >= 2) {
       const suggestions = filterSongs(value);
       setSong1Suggestions(suggestions);
@@ -111,6 +156,7 @@ function AdvancedSearch() {
   // Handle song2 input change
   const handleSong2Change = (value) => {
     setSong2(value);
+    setSelectedSong2Index(-1);
     if (value.length >= 2) {
       const suggestions = filterSongs(value);
       setSong2Suggestions(suggestions);
@@ -121,15 +167,77 @@ function AdvancedSearch() {
     }
   };
 
+  // Handle keyboard navigation for song1
+  const handleSong1KeyDown = (e) => {
+    if (!showSong1Suggestions || song1Suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedSong1Index(prev =>
+        prev < song1Suggestions.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedSong1Index(prev => prev > 0 ? prev - 1 : -1);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (selectedSong1Index >= 0) {
+        e.preventDefault();
+        selectSong1(song1Suggestions[selectedSong1Index]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSong1Suggestions(false);
+      setSelectedSong1Index(-1);
+    }
+  };
+
+  // Handle keyboard navigation for song2
+  const handleSong2KeyDown = (e) => {
+    if (!showSong2Suggestions || song2Suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedSong2Index(prev =>
+        prev < song2Suggestions.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedSong2Index(prev => prev > 0 ? prev - 1 : -1);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (selectedSong2Index >= 0) {
+        e.preventDefault();
+        selectSong2(song2Suggestions[selectedSong2Index]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSong2Suggestions(false);
+      setSelectedSong2Index(-1);
+    }
+  };
+
   // Select song from suggestions
   const selectSong1 = (songName) => {
     setSong1(songName);
     setShowSong1Suggestions(false);
+    setSelectedSong1Index(-1);
   };
 
   const selectSong2 = (songName) => {
     setSong2(songName);
     setShowSong2Suggestions(false);
+    setSelectedSong2Index(-1);
+  };
+
+  // Get color class for band
+  const getBandColor = (bandName) => {
+    const colors = {
+      'Grateful Dead': 'bg-blue-100 text-blue-700',
+      'Dead & Company': 'bg-purple-100 text-purple-700',
+      'Furthur': 'bg-green-100 text-green-700',
+      'The Other Ones': 'bg-orange-100 text-orange-700',
+      'Phil Lesh and Friends': 'bg-pink-100 text-pink-700',
+      'Phil Lesh And Friends': 'bg-pink-100 text-pink-700',
+      'Bob Weir and Wolf Bros': 'bg-indigo-100 text-indigo-700',
+    };
+    return colors[bandName] || 'bg-gray-100 text-gray-700';
   };
 
   // Helper: look up a song ID by name
@@ -158,6 +266,23 @@ function AdvancedSearch() {
     return data || [];
   };
 
+  // Find shows where song was played (in any set)
+  const findSongPlayed = async (songName) => {
+    const songId = await findSongId(songName);
+    if (!songId) return [];
+
+    // Get all show IDs where this song was played
+    const { data: setlistEntries } = await supabase
+      .from('setlists')
+      .select('show_id')
+      .eq('song_id', songId);
+
+    if (!setlistEntries || setlistEntries.length === 0) return [];
+
+    const showIds = [...new Set(setlistEntries.map(entry => entry.show_id))];
+    return await fetchShowsByIds(showIds);
+  };
+
   // Find shows where song1 is followed by song2 (consecutive in same set)
   const findSeguePairs = async (song1Name, song2Name) => {
     const song1Id = await findSongId(song1Name);
@@ -184,6 +309,39 @@ function AdvancedSearch() {
       .map(e => e.show_id);
 
     return fetchShowsByIds([...new Set(matchingShowIds)]);
+  };
+
+  // Find shows where song2 was played but NOT preceded by song1
+  const findNotPrecededBy = async (song1Name, song2Name) => {
+    const song1Id = await findSongId(song1Name);
+    if (!song1Id) return [];
+    const song2Id = await findSongId(song2Name);
+    if (!song2Id) return [];
+
+    // Fetch all setlist entries for both songs in parallel
+    const [{ data: entries1 }, { data: entries2 }] = await Promise.all([
+      supabase.from('setlists').select('show_id, set_name, position').eq('song_id', song1Id),
+      supabase.from('setlists').select('show_id, set_name, position').eq('song_id', song2Id)
+    ]);
+
+    if (!entries2) return [];
+
+    // Build a lookup of song1 appearances
+    const song1Lookup = new Set(
+      (entries1 || []).map(e => `${e.show_id}|${e.set_name}|${e.position}`)
+    );
+
+    // Find shows where song2 appears but is NOT immediately after song1
+    const showsWithPair = new Set(
+      entries2
+        .filter(e => song1Lookup.has(`${e.show_id}|${e.set_name}|${e.position - 1}`))
+        .map(e => e.show_id)
+    );
+
+    const orphanShowIds = [...new Set(entries2.map(e => e.show_id))]
+      .filter(id => !showsWithPair.has(id));
+
+    return fetchShowsByIds(orphanShowIds);
   };
 
   // Find shows where song1 appears but is NOT followed by song2
@@ -330,7 +488,9 @@ function AdvancedSearch() {
               onChange={(e) => setQueryType(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
+              <option value="played">Shows where song was played</option>
               <option value="segue">Song followed by another song (consecutive)</option>
+              <option value="not-preceded-by">Song played but NOT preceded by another song</option>
               <option value="without-segue">Song NOT followed by another song</option>
               <option value="in-set">Song played in a specific set</option>
               <option value="opener">Song as set opener</option>
@@ -349,10 +509,50 @@ function AdvancedSearch() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Bands</option>
-              <option value="Grateful Dead">Grateful Dead</option>
-              <option value="Dead & Company">Dead & Company</option>
+              {availableBands.map((bandName) => (
+                <option key={bandName} value={bandName}>
+                  {bandName}
+                </option>
+              ))}
             </select>
           </div>
+
+          {/* Played Query */}
+          {queryType === 'played' && (
+            <div className="mb-4 relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Song Name
+              </label>
+              <input
+                type="text"
+                value={song1}
+                onChange={(e) => handleSong1Change(e.target.value)}
+                onKeyDown={handleSong1KeyDown}
+                onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
+                onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
+                placeholder="e.g., China Cat Sunflower"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              {showSong1Suggestions && song1Suggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {song1Suggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      onClick={() => selectSong1(suggestion)}
+                      className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                        index === selectedSong1Index ? 'bg-blue-100' : 'hover:bg-blue-50'
+                      }`}
+                    >
+                      {suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-sm text-gray-500 mt-2">
+                Find all shows where this song was performed
+              </p>
+            </div>
+          )}
 
           {/* Segue Query */}
           {queryType === 'segue' && (
@@ -365,6 +565,7 @@ function AdvancedSearch() {
                   type="text"
                   value={song1}
                   onChange={(e) => handleSong1Change(e.target.value)}
+                  onKeyDown={handleSong1KeyDown}
                   onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
                   onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
                   placeholder="e.g., China Cat Sunflower"
@@ -376,7 +577,9 @@ function AdvancedSearch() {
                       <div
                         key={index}
                         onClick={() => selectSong1(suggestion)}
-                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                          index === selectedSong1Index ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
                       >
                         {suggestion}
                       </div>
@@ -393,6 +596,7 @@ function AdvancedSearch() {
                   type="text"
                   value={song2}
                   onChange={(e) => handleSong2Change(e.target.value)}
+                  onKeyDown={handleSong2KeyDown}
                   onBlur={() => setTimeout(() => setShowSong2Suggestions(false), 200)}
                   onFocus={() => song2.length >= 2 && setShowSong2Suggestions(true)}
                   placeholder="e.g., I Know You Rider"
@@ -404,7 +608,9 @@ function AdvancedSearch() {
                       <div
                         key={index}
                         onClick={() => selectSong2(suggestion)}
-                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                          index === selectedSong2Index ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
                       >
                         {suggestion}
                       </div>
@@ -412,6 +618,76 @@ function AdvancedSearch() {
                   </div>
                 )}
               </div>
+            </>
+          )}
+
+          {/* Not Preceded By Query */}
+          {queryType === 'not-preceded-by' && (
+            <>
+              <div className="mb-4 relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Song That Should NOT Come Before
+                </label>
+                <input
+                  type="text"
+                  value={song1}
+                  onChange={(e) => handleSong1Change(e.target.value)}
+                  onKeyDown={handleSong1KeyDown}
+                  onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
+                  onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
+                  placeholder="e.g., China Cat Sunflower"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                {showSong1Suggestions && song1Suggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {song1Suggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => selectSong1(suggestion)}
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                          index === selectedSong1Index ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
+                      >
+                        {suggestion}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="text-center text-gray-500 mb-4">✗›</div>
+              <div className="mb-4 relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Song to Find
+                </label>
+                <input
+                  type="text"
+                  value={song2}
+                  onChange={(e) => handleSong2Change(e.target.value)}
+                  onKeyDown={handleSong2KeyDown}
+                  onBlur={() => setTimeout(() => setShowSong2Suggestions(false), 200)}
+                  onFocus={() => song2.length >= 2 && setShowSong2Suggestions(true)}
+                  placeholder="e.g., I Know You Rider"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                {showSong2Suggestions && song2Suggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {song2Suggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => selectSong2(suggestion)}
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                          index === selectedSong2Index ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
+                      >
+                        {suggestion}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                Find shows where the second song was played but NOT immediately after the first song
+              </p>
             </>
           )}
 
@@ -426,6 +702,7 @@ function AdvancedSearch() {
                   type="text"
                   value={song1}
                   onChange={(e) => handleSong1Change(e.target.value)}
+                  onKeyDown={handleSong1KeyDown}
                   onBlur={() => setTimeout(() => setShowSong1Suggestions(false), 200)}
                   onFocus={() => song1.length >= 2 && setShowSong1Suggestions(true)}
                   placeholder="e.g., China Cat Sunflower"
@@ -437,7 +714,9 @@ function AdvancedSearch() {
                       <div
                         key={index}
                         onClick={() => selectSong1(suggestion)}
-                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                          index === selectedSong1Index ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
                       >
                         {suggestion}
                       </div>
@@ -454,6 +733,7 @@ function AdvancedSearch() {
                   type="text"
                   value={song2}
                   onChange={(e) => handleSong2Change(e.target.value)}
+                  onKeyDown={handleSong2KeyDown}
                   onBlur={() => setTimeout(() => setShowSong2Suggestions(false), 200)}
                   onFocus={() => song2.length >= 2 && setShowSong2Suggestions(true)}
                   placeholder="e.g., I Know You Rider"
@@ -465,7 +745,9 @@ function AdvancedSearch() {
                       <div
                         key={index}
                         onClick={() => selectSong2(suggestion)}
-                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        className={`px-4 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                          index === selectedSong2Index ? 'bg-blue-100' : 'hover:bg-blue-50'
+                        }`}
                       >
                         {suggestion}
                       </div>
@@ -639,7 +921,7 @@ function AdvancedSearch() {
                         {formatDate(show.date)}
                       </span>
                       {show.band && show.band !== 'Grateful Dead' && (
-                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                        <span className={`text-xs px-2 py-0.5 rounded ${getBandColor(show.band)}`}>
                           {show.band}
                         </span>
                       )}
